@@ -2,7 +2,6 @@
 import string
 import re
 from bs4 import BeautifulSoup
-import unicodedata
 
 __western_emoticons__ = open("westernascii.txt", 'r').read().splitlines()
 __sideways_emoticons__ = open("sidewayslatin.txt", 'r').read().splitlines()
@@ -15,6 +14,10 @@ class BoW():
 
 
     ## Transformers
+
+    def toLowerCase(self):
+         self.workflow.append(Transformer('to lower case', 
+                                          lambda x : x.lower()))
 
     def removePunct(self):        
          self.workflow.append(Transformer('remove punctuation', 
@@ -30,28 +33,40 @@ class BoW():
         
         self.workflow.append(Transformer('remove tags',
                                          lambda x : BeautifulSoup(x).get_text()))
+                                         
+    def __removeStopWords__(self, tokens, filepath):
+        
+        ## load stopword list from file with lowercase words one per line
+        rawWords = open(filepath, 'r').read().splitlines()
+        stops = set(rawWords)
+        return [word for word in tokens if word not in stops]
+        
+                                          
 
-
+    def removeStopWords(self, filepath, sep = None):
+        
+        self.workflow.append(Transformer('remove stop words',
+                                         lambda x : self.__removeStopWords__(x.split(sep), filepath)))
 
 
     def countNumerics(self):
          
-         self.workflow.append(Extractor('count numerics', 
+         self.workflow.append(Extractor('numerics_count', 
                                         lambda x : len([char for char in x if char in string.digits])))
 
     def countChars(self):
          
-         self.workflow.append(Extractor('count characters', 
+         self.workflow.append(Extractor('character_count', 
                                         lambda x : len(x)))
 
     def countPunct(self):
          
-         self.workflow.append(Extractor('count punctuation', 
+         self.workflow.append(Extractor('punctuation_count', 
                                         lambda x : len([char for char in x if char in string.punctuation])))
 
     def countWords(self, sep = None):
          
-         self.workflow.append(Extractor('count words', 
+         self.workflow.append(Extractor('word_count', 
                                         lambda x : len(x.split(sep))))
 
     def countThisChar(self, thisChar):
@@ -96,53 +111,52 @@ class BoW():
         
     def countWordLengths(self, sep = None):
          
-         self.workflow.append(Extractor('count word lengths', 
+         self.workflow.append(Extractor('word_lengths_count', 
                                         lambda x :  self.__countWordLengths__(x.split(sep))))
                                         
-    ## This is broken - we need ot iterate by words for ascii but but "char" 
-    ## for misc and emoji                                    
-    def __countEmojis__(self, chars):
+                                       
+    def __countEmojis__(self, tokens):
         
-        for char in chars :
-            print(string.decode('utf-8'))
+        
         labels = ['ascii','misc','emoticons']
         counts = [0] * 3
-        ascii = len([char for char in chars if char in __western_emoticons__])
-        ascii = ascii + len([char for char in chars if char in __sideways_emoticons__])
-        ascii  = ascii + len([char for char in chars if char in __upright_emoticons__])
+        ## These are the magic numbers that define bounds for certain unicode 
+        ## classes - http://www.unicode.org/charts/
+        misc_lower = 0x2600
+        misc_upper = 0x26ff
+        emoji_lower = 0x1f500
+        emoji_upper = 0x1f64f
+       
+        ## tokens are words or rather sequences of chars separated by ws
+        ## first we treat tokens as entities and check against reference files
+        ascii = len([token for token in tokens if token in __western_emoticons__])
+        ascii = ascii + len([token for token in tokens if token in __sideways_emoticons__])
+        ascii  = ascii + len([token for token in tokens if token in __upright_emoticons__])
         counts[0] = ascii
-        counts[1] = len([char for char in chars if '\u2600' <= char.decode('utf-8') <= '\u26FF'])
-        counts[2] = len([char for char in chars if '\u1F600' <= char.decode('utf-8') <= '\u1F64F'])
+        ## now we look at indivisual chars in the tokens for single emoticons
+        ## according to unicode ranges
+        for token in tokens:  
+        
+            counts[1] = len([char for char in token if misc_lower <= ord(char) <= misc_upper])
+            counts[2] = len([char for char in token if emoji_lower <= ord(char) <= emoji_upper])
         
         return dict(zip(labels,counts))
         
-    def countEmojis(self):
+    def countEmojis(self, sep = None):
          
-         self.workflow.append(Extractor('count emoticons', 
-                                        lambda x :  self.__countEmojis__(x)))                                       
+         self.workflow.append(Extractor('emoticons_count', 
+                                        lambda x :  self.__countEmojis__(x.split(sep))))                                       
                                   
 
-"""
+    def calculateDiversity(self, sep = None):
+        
+        self.workflow.append(Extractor('lexical_diversity',
+                                       lambda x : len(set(x.split(sep)))/len(x.split(sep))))
+                                       
+    def calculateVocabulary(self, sep=None):
     
-
-         
- 
-     
-         
-    def countEmojis
-
-
-
-
-    def removeStopWords():
-
-
-
-
-
-
-
-"""
+        self.workflow.append(Extractor('vocabulary_count',
+                                       lambda x : len(set(x.split(sep)))))                                   
 
 class ProcessStep():
     
